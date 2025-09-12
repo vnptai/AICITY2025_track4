@@ -1,5 +1,5 @@
 import sys
-sys.path.append('/home/hungdv/mmdetection')
+sys.path.append('/media/hungdv/Source/Code/AICityChallenge2024/mmdetection')
 
 _base_ = ['co_dino_5scale_r50_8xb2_1x_coco.py']
 
@@ -86,32 +86,11 @@ train_pipeline = [
     dict(type='PackDetInputs')
 ]
 
-data_root = '/media/hungdv/Source/Data/ai-city-challenge-2024/track4/Fisheye8K/'
+data_root = '../../data/train/'
 metainfo = {
-    'classes': ('Pedestrian'),
+    'classes': ('Bus', 'Bike', 'Car', 'Pedestrian', 'Truck'),
 }
 dataset_type = 'CocoDataset'
-
-train_dataloader = dict(
-    batch_size=1, num_workers=1,
-    dataset=dict(
-        type=dataset_type,
-        pipeline=train_pipeline,
-        data_root=data_root,
-        metainfo=metainfo,
-        ann_file=data_root + 'ms_coco-format_labels/train_person.json',
-        data_prefix=dict(img=data_root + 'train/images/')
-    ))
-
-test_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(type='Resize', scale=(2048, 1280), keep_ratio=True),
-    dict(type='LoadAnnotations', with_bbox=True),
-    dict(
-        type='PackDetInputs',
-        meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-                   'scale_factor'))
-]
 
 val_dataloader = dict(
     dataset=dict(
@@ -119,16 +98,17 @@ val_dataloader = dict(
         pipeline=test_pipeline,
         data_root=data_root,
         metainfo=metainfo,
-        ann_file=data_root + 'ms_coco-format_labels/test_person.json',
-        data_prefix=dict(img=data_root + 'test/images/')
+        ann_file=data_root + 'train.json',
+        data_prefix=dict(img=data_root + 'images/')
         ))
 test_dataloader = val_dataloader
 
 val_evaluator = dict(  # Validation evaluator config
     type='CocoMetric',  # The coco metric used to evaluate AR, AP, and mAP for detection and instance segmentation
-    ann_file=data_root + 'ms_coco-format_labels/test_person.json',  # Annotation file path
+    ann_file=data_root + 'train.json',  # Annotation file path
     metric=['bbox'],  # Metrics to be evaluated, `bbox` for detection and `segm` for instance segmentation
-    format_only=False)
+    format_only=True,  # Whether to only evaluate the results without inference
+    outfile_prefix='../../data/train_gen')  # 要保存的 JSON 文件的前缀
 test_evaluator = val_evaluator  # Testing evaluator config
 
 optim_wrapper = dict(optimizer=dict(lr=1e-4))
@@ -145,3 +125,28 @@ param_scheduler = [
         milestones=[8],
         gamma=0.1)
 ]
+
+tta_model = dict(
+    type='DetTTAModel',
+    tta_cfg=dict(nms=dict(
+                   type='nms',
+                   iou_threshold=0.5),
+                   max_per_img=100))
+
+tta_pipeline = [
+    dict(type='LoadImageFromFile',
+        backend_args=None),
+    dict(
+        type='TestTimeAug',
+        transforms=[[
+            dict(type='Resize', scale=(1024, 2048), keep_ratio=True)
+        ], [ # It uses 2 flipping transformations (flipping and not flipping).
+            dict(type='RandomFlip', prob=1.),
+            dict(type='RandomFlip', prob=0.)
+        ], [
+            dict(
+               type='PackDetInputs',
+               meta_keys=('img_id', 'img_path', 'ori_shape',
+                       'img_shape', 'scale_factor', 'flip',
+                       'flip_direction'))
+       ]])]
