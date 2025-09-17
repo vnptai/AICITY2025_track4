@@ -65,47 +65,32 @@ weights/
   object365_pretrained.pth   # (will be produced later if you pretrain)
 ```
 
-## 3. (Optional) Regenerate Labels / Intermediate Data
+## 3. (Optional) Regenerate Labels 
 If you need to regenerate training-ready annotations:
 ```
 cd scripts
 bash gen_data.sh
-```
-Outputs (example):
-```
-data/processed/
-  train.json
-  val.json
 ```
 
 ## 4. (Optional) Pretrain on Objects365 
 If you want to create a pretrained checkpoint before final training:
 ```
 cd training
-python train_object365.py \
-  --data ../data/processed/object365.json \
-  --output ../model/object365_pretrained.pth
+python train_object365.py
 ```
-Arguments may vary; check the script's parser (`--help`).
 
 ## 5. Final Training
 Uses either the freshly produced object365 pretrained weights or a backbone.
 ```
 cd training
-python train.py \
-  --data ../data/processed/train.json \
-  --val  ../data/processed/val.json \
-  --pretrained ../model/object365_pretrained.pth \
-  --output ../model/final_model.pth
+python train.py
 ```
 
 ## 6. Convert / Export Model
 After training:
 ```
 cd scripts
-bash convert_model.sh \
-  ../model/final_model.pth \
-  ../model/export/
+bash convert_model.sh
 ```
 Outputs might include ONNX / TorchScript versions (depends on script implementation).
 
