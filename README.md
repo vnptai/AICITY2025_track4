@@ -2,31 +2,6 @@
 
 End-to-end pipeline for training and converting the model used in AICITY2025 Track 4.
 
-## Features
-- Unified data preparation script
-- Optional pretraining on Objects365 (object365) style data
-- Final task-specific training
-- Model export / conversion script
-- Reproducible bash-based automation
-
-## Repository Structure (simplified)
-```
-AICITY2025_track4/
-  data/                 # Place extracted datasets here
-  model/                # Place downloaded / converted weights here
-  scripts/
-    gen_data.sh
-    convert_model.sh
-  training/
-    train_object365.py
-    train.py
-```
-
-## Requirements
-- Python 3.9+
-- Recommended: Linux (bash). On Windows use WSL or adapt commands.
-- GPU with sufficient VRAM
-- Installed CUDA + compatible PyTorch
 
 ## Installation
 ```
@@ -47,13 +22,33 @@ Extract them into:
 AICITY2025_track4/data/
 ```
 Expected (example):
+
 ```
-data/
-  images/
-  annotations/
-  splits/
+AICITY2025_track4/
+  data/                 
+    other_datasets/
+        images/
+        labels/
+    test/
+        images/
+        labels/
+    train/
+        images/
+        labels/
+    train_syn/
+        images/
+        labels/
+    val/
+        images/
+        labels/
+    val_syn/
+        images/
+        labels/
+    visdrone_syn_enhanced/
+        images/
+        labels/
+ 
 ```
-Adjust paths if your layout differs.
 
 ## 2. Download Pretrained Model
 Download from:
