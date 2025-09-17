@@ -1,0 +1,18 @@
+FROM nvcr.io/nvidia/l4t-tensorrt:r8.6.2-devel
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Ho_Chi_Minh
+
+RUN apt-get update && \
+    apt-get install -y build-essential cmake && \
+    apt-get install -y tzdata && \
+    ln -fs /usr/share/zoneinfo/$TZ /etc/localtime && \
+    dpkg-reconfigure -f noninteractive tzdata
+RUN apt-get install -y libopencv-dev
+WORKDIR /track4
+COPY . /track4
+RUN mkdir /images
+RUN mkdir /output
+RUN chmod +x infer.sh
+CMD ["./infer.sh"]
+#CMD ["tail", "-f", "/dev/null"]
