@@ -1,2 +1,7 @@
-data/
 *.json
+labeling/data_processing/syn_labels/
+data/*.txt
+data/*.jpg
+data/*.png
+data/*.jpeg 
+data/visdrone/subset.json
