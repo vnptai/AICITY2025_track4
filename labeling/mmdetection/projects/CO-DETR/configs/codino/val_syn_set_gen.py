@@ -1,5 +1,5 @@
-import sys
-sys.path.append('/media/hungdv/Source/Code/AICityChallenge2024/mmdetection')
+# import sys
+# sys.path.append('/media/hungdv/Source/Code/AICityChallenge2024/mmdetection')
 
 _base_ = ['co_dino_5scale_r50_8xb2_1x_coco.py']
 
