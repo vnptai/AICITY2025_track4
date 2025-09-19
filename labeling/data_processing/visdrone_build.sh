@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 # Define paths
 BASE_DIR=$(dirname "$(readlink -f "$0")")
 PROJECT_ROOT=$(realpath "${BASE_DIR}/../..")
-INPUT_JSON="${PROJECT_ROOT}/data/visdrone/subset.json"
+INPUT_JSON="${PROJECT_ROOT}/data/visdrone/visdrone-train.json"
 INPUT_IMG_DIR="${PROJECT_ROOT}/data/visdrone/images"
 WORK_DIR="${PROJECT_ROOT}/data/visdrone_enhance"
 FINAL_JSON="${WORK_DIR}/visdrone_enhance.json"
