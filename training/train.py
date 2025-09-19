@@ -19,4 +19,5 @@ train_results = model.train(
     warmup_epochs=0,
     workers=8,
     replace=0.0,
+    save_period=5,
 )

@@ -76,6 +76,10 @@ cd training
 python train.py
 ```
 
+
+After the training is completed, take the model from **epoch 50**, rename it to **yolo11m.pt**, and copy it into the **weights** folder.
+
+
 ## 6. Convert and Inference on Jetson
 After training:
 ```
