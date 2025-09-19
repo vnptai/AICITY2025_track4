@@ -56,6 +56,10 @@ weights/
 ```
 
 ## 3. (Optional) Regenerate Labels 
+
+First, build the VisDrone synthetic enhanced dataset as described in  
+`labeling/data_processing/README_visdrone_build.md`.
+
 If you need to regenerate training-ready annotations:
 ```
 cd scripts
@@ -86,6 +90,3 @@ After training:
 cd scripts
 bash convert_model.sh
 ```
-
-
-
