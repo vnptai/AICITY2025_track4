@@ -41,7 +41,7 @@ AICITY2025_track4/
 
 ## 2. Download Pretrained Model
 Download from:
-<MODEL_DOWNLOAD_LINK>
+[weight link](https://1drv.ms/u/c/3f64f78089759ca1/EXtAbIvc1N5FtYTKH18T5bcBoLbjzCYnXK7fGAMbM6PXPg?e=eHNeAC)
 
 Extract into:
 ```
