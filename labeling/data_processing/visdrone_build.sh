@@ -1,9 +1,4 @@
 #!/bin/bash
-
-# visdrone_build.sh - Script to process VisDrone images through the entire pipeline
-# Author: Claude AI
-# Date: September 18, 2023
-
 set -e  # Exit immediately if a command exits with a non-zero status
 
 # ANSI color codes
@@ -16,14 +11,11 @@ NC='\033[0m' # No Color
 # Define paths
 BASE_DIR=$(dirname "$(readlink -f "$0")")
 PROJECT_ROOT=$(realpath "${BASE_DIR}/../..")
-INPUT_DIR="${PROJECT_ROOT}/data/visdrone"
-MERGED_DIR="${INPUT_DIR}/merged"
-CUT_DIR="${INPUT_DIR}/cut"
-AUG_DIR="${INPUT_DIR}/augmented"
-FINAL_DIR="${INPUT_DIR}"
-SYN_LABELS_DIR="${PROJECT_ROOT}/syn_labels"
-SYN_OUTPUT_DIR="${INPUT_DIR}/labels-aug-syn"
-FINAL_ENHANCE_DIR="${PROJECT_ROOT}/data/visdrone_syn_enhance"
+INPUT_JSON="${PROJECT_ROOT}/data/visdrone/subset.json"
+INPUT_IMG_DIR="${PROJECT_ROOT}/data/visdrone/images"
+WORK_DIR="${PROJECT_ROOT}/data/visdrone_enhance"
+FINAL_JSON="${WORK_DIR}/visdrone_enhance.json"
+FINAL_YOLO_DIR="${WORK_DIR}/labels"
 
 # Utility functions
 print_header() {
@@ -36,6 +28,13 @@ print_step() {
     echo -e "${YELLOW}===> $1${NC}"
 }
 
+check_file() {
+    if [ ! -f "$1" ]; then
+        echo -e "${RED}ERROR: File $1 does not exist!${NC}"
+        exit 1
+    fi
+}
+
 check_directory() {
     if [ ! -d "$1" ]; then
         echo -e "${RED}ERROR: Directory $1 does not exist!${NC}"
@@ -43,87 +42,90 @@ check_directory() {
     fi
 }
 
-# Check if input directory exists
-check_directory "${INPUT_DIR}/images"
-check_directory "${INPUT_DIR}/labels"
+# Check if input files exist
+check_file "${INPUT_JSON}"
+check_directory "${INPUT_IMG_DIR}"
 
-# Create necessary directories
-mkdir -p "${MERGED_DIR}/images"
-mkdir -p "${MERGED_DIR}/merged_labels"
-mkdir -p "${CUT_DIR}/images"
-mkdir -p "${CUT_DIR}/labels"
-mkdir -p "${AUG_DIR}/images"
-mkdir -p "${AUG_DIR}/labels"
-mkdir -p "${SYN_OUTPUT_DIR}"
-mkdir -p "${FINAL_ENHANCE_DIR}/images"
-mkdir -p "${FINAL_ENHANCE_DIR}/labels"
+# Create working directories
+mkdir -p "${WORK_DIR}/images"
+mkdir -p "${WORK_DIR}/merged"
+mkdir -p "${WORK_DIR}/cut"
+mkdir -p "${FINAL_YOLO_DIR}"
 
-# ===== STEP 1: Process VisDrone Dataset =====
-print_header "STEP 1: MERGE CLASSES, CUT IMAGES, AND AUGMENT WITH FISHEYE"
-
-# 1.1: Merge Classes
+# ===== STEP 1: MERGE CLASSES =====
+print_header "STEP 1: MERGE CLASSES"
 print_step "Running merge_classes.py"
+
 python "${BASE_DIR}/visdrone-train/merge_classes.py" \
-    --input-dir "${INPUT_DIR}" \
-    --output-dir "${MERGED_DIR}"
+    --input-json "${INPUT_JSON}" \
+    --output-json "${WORK_DIR}/merged/merged.json"
 
-# 1.2: Cut Images
+# ===== STEP 2: CUT IMAGES =====  
+print_header "STEP 2: CUT IMAGES"
 print_step "Running cut_image.py"
+
 python "${BASE_DIR}/visdrone-train/cut_image.py" \
-    --input-dir "${MERGED_DIR}" \
-    --output-dir "${CUT_DIR}"
+    --input-json "${WORK_DIR}/merged/merged.json" \
+    --input-img-dir "${INPUT_IMG_DIR}" \
+    --output-json "${WORK_DIR}/cut/cut.json" \
+    --output-img-dir "${WORK_DIR}/cut/images"
 
-# 1.3: Augment with Fisheye
+# ===== STEP 3: AUGMENT WITH FISHEYE =====
+print_header "STEP 3: AUGMENT WITH FISHEYE"
 print_step "Running aug_visdrone.py"
+
 python "${BASE_DIR}/visdrone-train/aug_visdrone.py" \
-    --input-dir "${MERGED_DIR}" \
-    --output-dir "${AUG_DIR}"
+    --input-json "${WORK_DIR}/cut/cut.json" \
+    --input-img-dir "${WORK_DIR}/cut/images" \
+    --output-json "${FINAL_JSON}" \
+    --output-img-dir "${WORK_DIR}/images"
 
-# Rename augmented outputs to final locations
-print_step "Moving augmented output to final locations"
-cp -r "${AUG_DIR}/images/"* "${FINAL_DIR}/images-aug/"
-cp -r "${AUG_DIR}/labels/"* "${FINAL_DIR}/labels-aug/"
+# ===== STEP 4: CONVERT TO YOLO FORMAT =====
+print_header "STEP 4: CONVERT TO YOLO FORMAT"
+print_step "Running coco_to_yolo.py"
 
-# ===== STEP 2: Convert Synthetic Labels =====
-print_header "STEP 2: CONVERT SYNTHETIC LABELS FROM COCO TO YOLO FORMAT"
-print_step "Running coco_to_yolov.py"
-
-# Check if synthetic labels file exists
-SYN_JSON="${SYN_LABELS_DIR}/visdrone_syn.json"
-if [ ! -f "${SYN_JSON}" ]; then
-    echo -e "${RED}ERROR: Synthetic labels file ${SYN_JSON} not found!${NC}"
-    exit 1
-fi
-
-python "${BASE_DIR}/coco_to_yolov.py" \
-    --coco "${SYN_JSON}" \
-    --output "${SYN_OUTPUT_DIR}"
-
-# ===== STEP 3: Enhance Labels with Synthetic Data =====
-print_header "STEP 3: ENHANCE LABELS WITH SYNTHETIC DATA"
-print_step "Running enhance_bboxes.py"
-
-python "${BASE_DIR}/enhance_bboxes.py" \
-    --gt-dir "${FINAL_DIR}/labels-aug" \
-    --pred-dir "${SYN_OUTPUT_DIR}/labels" \
-    --output-dir "${FINAL_ENHANCE_DIR}/labels" \
-    --img-dir "${FINAL_DIR}/images-aug" \
-    --vis-dir "${FINAL_ENHANCE_DIR}/visualized"
-
-# Copy the original images to the enhanced directory
-print_step "Copying images to final enhanced directory"
-cp -r "${FINAL_DIR}/images-aug/"* "${FINAL_ENHANCE_DIR}/images/"
+python "${BASE_DIR}/visdrone-train/coco_to_yolo.py" \
+    --input-json "${FINAL_JSON}" \
+    --output-label-dir "${FINAL_YOLO_DIR}"
 
 print_header "PROCESSING COMPLETE!"
-echo "Output directories:"
-echo "- Images: ${FINAL_ENHANCE_DIR}/images"
-echo "- Labels: ${FINAL_ENHANCE_DIR}/labels"
 
 # Print statistics
-IMG_COUNT=$(find "${FINAL_ENHANCE_DIR}/images" -type f | wc -l)
-LBL_COUNT=$(find "${FINAL_ENHANCE_DIR}/labels" -type f | wc -l)
-echo -e "\nStatistics:"
-echo "- Final images: ${IMG_COUNT}"
-echo "- Final labels: ${LBL_COUNT}"
+if [ -f "${FINAL_JSON}" ]; then
+    JSON_SIZE=$(du -h "${FINAL_JSON}" | cut -f1)
+    echo "Final JSON: ${FINAL_JSON} (${JSON_SIZE})"
+    
+    # Get statistics from JSON
+    JSON_STATS=$(python -c "
+import json
+with open('${FINAL_JSON}', 'r') as f:
+    data = json.load(f)
+print(f'Images: {len(data.get(\"images\", []))}')
+print(f'Annotations: {len(data.get(\"annotations\", []))}')
+print(f'Categories: {len(data.get(\"categories\", []))}')
+")
+    echo "${JSON_STATS}"
+else
+    echo -e "${RED}ERROR: Final JSON file was not created!${NC}"
+fi
+
+if [ -d "${FINAL_YOLO_DIR}" ]; then
+    YOLO_COUNT=$(find "${FINAL_YOLO_DIR}" -name "*.txt" | wc -l)
+    echo "YOLO labels: ${YOLO_COUNT} files"
+else
+    echo -e "${RED}ERROR: YOLO label directory was not created!${NC}"
+fi
+
+if [ -d "${WORK_DIR}/images" ]; then
+    IMG_COUNT=$(find "${WORK_DIR}/images" -type f | wc -l)
+    echo "Final images: ${IMG_COUNT} files"
+else
+    echo -e "${RED}ERROR: Final image directory was not created!${NC}"
+fi
+
+echo -e "\nOutput locations:"
+echo "- Final JSON: ${FINAL_JSON}"
+echo "- Final images: ${WORK_DIR}/images"
+echo "- YOLO labels: ${FINAL_YOLO_DIR}"
 
 exit 0

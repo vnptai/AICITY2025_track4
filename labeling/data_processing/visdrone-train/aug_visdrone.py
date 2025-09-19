@@ -1,20 +1,17 @@
+#!/usr/bin/env python3
+import json
+import os
 import cv2
 import numpy as np
 import math
-import os
-import glob
-from pathlib import Path
 import argparse
-import tqdm
+from pathlib import Path
+from tqdm import tqdm
 
 def rect_to_fisheye_point(x_src, y_src, S, f_fisheye):
     """
     Convert a point (x_src, y_src) on a square rectilinear image of size S×S
-    (center C = S/2, focal length of rectilinear = S/2) to the corresponding coordinates
-    on an equidistant fisheye image of the same size S×S (center C = S/2, fisheye focal length = f_fisheye).
-
-    Returns (x_out, y_out). If the point is outside the circle (theta > theta_max),
-    clamp theta to theta_max to map it to the edge of the circle (do not assign –1).
+    to fisheye coordinates
     """
     C = S / 2.0
     f_rect = S / 2.0
@@ -57,104 +54,101 @@ def rect_to_fisheye_point(x_src, y_src, S, f_fisheye):
     
     return x_out, y_out
 
-def convert_yolo_bbox_to_fisheye(
-    txt_path,     # path to the YOLO txt file
-    img_orig,     # numpy array of the original image
-    k=1.0         # hệ số scale fisheye
-):
-    h_orig, w_orig = img_orig.shape[:2]
-    # 1) Resize the original image to a square S×S, with S = min(h_orig, w_orig)
-    S = min(h_orig, w_orig)
-    img_square = cv2.resize(img_orig, (S, S))
+def convert_bbox_to_fisheye(bbox, img_width, img_height, k=1.0):
+    """
+    Convert a COCO bbox to fisheye format
     
-    # 2) Calculate focal_fisheye
+    Args:
+        bbox: COCO bbox [x, y, width, height]
+        img_width, img_height: Original image dimensions
+        k: Fisheye scale factor
+    
+    Returns:
+        Transformed bbox in fisheye coordinates
+    """
+    # Resize to square image S×S, with S = min(h_orig, w_orig)
+    S = min(img_height, img_width)
+    
+    # Calculate scale factors
+    scale_x = S / img_width
+    scale_y = S / img_height
+    
+    # Scale bbox to square image
+    x, y, w, h = bbox
+    x_sq = x * scale_x
+    y_sq = y * scale_y
+    w_sq = w * scale_x
+    h_sq = h * scale_y
+    
+    # Calculate fisheye focal length
     theta_max = math.acos(1.0 / math.sqrt(3.0))
     R_out = S / 2.0
     f_fisheye = (R_out / theta_max) * k
     
-    # 3) Read the YOLO txt file if it exists
-    bboxes = []
-    if os.path.exists(txt_path):
-        with open(txt_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split()
-                if len(parts) < 5:
-                    continue
-                try:
-                    cls_id = int(parts[0])
-                    x_c_norm = float(parts[1])
-                    y_c_norm = float(parts[2])
-                    w_norm = float(parts[3])
-                    h_norm = float(parts[4])
-                except:
-                    continue
-                
-                # Calculate bbox pixel on the original image
-                x_c_abs = x_c_norm * w_orig
-                y_c_abs = y_c_norm * h_orig
-                w_abs   = w_norm   * w_orig
-                h_abs   = h_norm   * h_orig
-                
-                # 4 corners on the original image: 
-                x_min_orig = x_c_abs - w_abs/2.0
-                x_max_orig = x_c_abs + w_abs/2.0
-                y_min_orig = y_c_abs - h_abs/2.0
-                y_max_orig = y_c_abs + h_abs/2.0
-                
-                # 4) Scale to the square image S×S:
-                scale_x = S / w_orig
-                scale_y = S / h_orig
-                x_min_sq = x_min_orig * scale_x
-                x_max_sq = x_max_orig * scale_x
-                y_min_sq = y_min_orig * scale_y
-                y_max_sq = y_max_orig * scale_y
-                
-                # 5) Calculate 4 corners
-                corners = [
-                    (x_min_sq, y_min_sq),
-                    (x_min_sq, y_max_sq),
-                    (x_max_sq, y_min_sq),
-                    (x_max_sq, y_max_sq),
-                ]
-                # 6) Map each corner to fisheye
-                fisheye_corners = [rect_to_fisheye_point(x, y, S, f_fisheye) for (x, y) in corners]
-                xs_f = [pt[0] for pt in fisheye_corners]
-                ys_f = [pt[1] for pt in fisheye_corners]
-                
-                # 7) Calculate bbox on fisheye
-                x_min_f = min(xs_f)
-                x_max_f = max(xs_f)
-                y_min_f = min(ys_f)
-                y_max_f = max(ys_f) 
-                
-                # 8) Clip to [0..S]
-                x_min_f = max(0.0, min(S, x_min_f))
-                x_max_f = max(0.0, min(S, x_max_f))
-                y_min_f = max(0.0, min(S, y_min_f))
-                y_max_f = max(0.0, min(S, y_max_f))
-                
-                # 9) Convert to YOLO normalized format
-                w_f = x_max_f - x_min_f
-                h_f = y_max_f - y_min_f
-                x_c_f = x_min_f + w_f/2.0
-                y_c_f = y_min_f + h_f/2.0
-                
-                # Normalized
-                x_c_f_norm = x_c_f / S
-                y_c_f_norm = y_c_f / S
-                w_f_norm   = w_f   / S
-                h_f_norm   = h_f   / S
-                
-                bboxes.append((cls_id, x_c_f_norm, y_c_f_norm, w_f_norm, h_f_norm))
+    # Calculate 4 corners of the bbox
+    corners = [
+        (x_sq, y_sq),                    # top-left
+        (x_sq, y_sq + h_sq),            # bottom-left
+        (x_sq + w_sq, y_sq),            # top-right
+        (x_sq + w_sq, y_sq + h_sq),     # bottom-right
+    ]
     
-    return img_square, f_fisheye, bboxes
+    # Map each corner to fisheye
+    fisheye_corners = [rect_to_fisheye_point(x, y, S, f_fisheye) for (x, y) in corners]
+    xs_f = [pt[0] for pt in fisheye_corners]
+    ys_f = [pt[1] for pt in fisheye_corners]
+    
+    # Calculate bbox on fisheye
+    x_min_f = min(xs_f)
+    x_max_f = max(xs_f)
+    y_min_f = min(ys_f)
+    y_max_f = max(ys_f)
+    
+    # Clip to [0..S]
+    x_min_f = max(0.0, min(S, x_min_f))
+    x_max_f = max(0.0, min(S, x_max_f))
+    y_min_f = max(0.0, min(S, y_min_f))
+    y_max_f = max(0.0, min(S, y_max_f))
+    
+    # Convert to COCO format
+    w_f = x_max_f - x_min_f
+    h_f = y_max_f - y_min_f
+    
+    return [x_min_f, y_min_f, w_f, h_f], S
 
+def crop_and_adjust_bbox(bbox, S, crop_ratio=0.827):
+    """
+    Adjust bbox after cropping the fisheye image
+    """
+    x, y, w, h = bbox
+    
+    # Calculate new image size and crop offset
+    new_size = int(S * crop_ratio)
+    start = (S - new_size) // 2
+    
+    # Adjust coordinates due to crop
+    x_new = x - start
+    y_new = y - start
+    
+    # Calculate the boundary points
+    x_min_new = max(0, x_new)
+    x_max_new = min(new_size, x_new + w)
+    y_min_new = max(0, y_new)
+    y_max_new = min(new_size, y_new + h)
+    
+    # Check if box still exists after cropping
+    if x_min_new >= x_max_new or y_min_new >= y_max_new:
+        return None
+    
+    # Calculate new dimensions
+    w_new = x_max_new - x_min_new
+    h_new = y_max_new - y_min_new
+    
+    return [x_min_new, y_min_new, w_new, h_new]
 
-def create_fisheye_image(img_square, f_fisheye, interp=cv2.INTER_CUBIC):
-    S = img_square.shape[0]
+def create_fisheye_image(img, f_fisheye, interp=cv2.INTER_CUBIC):
+    """Create fisheye image from square input image"""
+    S = img.shape[0]
     C = S / 2.0
     
     # Create map_x, map_y
@@ -204,7 +198,7 @@ def create_fisheye_image(img_square, f_fisheye, interp=cv2.INTER_CUBIC):
                     map_y[y_out, x_out] = y_src
     
     dst_fisheye = cv2.remap(
-        img_square,
+        img,
         map_x, map_y,
         interpolation=interp,
         borderMode=cv2.BORDER_CONSTANT,
@@ -212,163 +206,167 @@ def create_fisheye_image(img_square, f_fisheye, interp=cv2.INTER_CUBIC):
     )
     return dst_fisheye
 
-def crop_and_adjust_bboxes(fisheye_img, bboxes, crop_ratio=0.827):
-    S = fisheye_img.shape[0]
+def process_image_and_annotations(img_path, annotations, output_img_path, k=1.0, crop_ratio=0.827):
+    """
+    Process a single image with fisheye transformation and adjust annotations
+    """
+    # Read original image
+    img_orig = cv2.imread(img_path)
+    if img_orig is None:
+        raise ValueError(f"Could not read image: {img_path}")
+    
+    h_orig, w_orig = img_orig.shape[:2]
+    
+    # Resize to square
+    S = min(h_orig, w_orig)
+    img_square = cv2.resize(img_orig, (S, S))
+    
+    # Calculate fisheye focal length
+    theta_max = math.acos(1.0 / math.sqrt(3.0))
+    R_out = S / 2.0
+    f_fisheye = (R_out / theta_max) * k
+    
+    # Create fisheye image
+    fisheye_img = create_fisheye_image(img_square, f_fisheye)
+    
+    # Crop fisheye image
     new_size = int(S * crop_ratio)
     start = (S - new_size) // 2
     end = start + new_size
+    fisheye_cropped = fisheye_img[start:end, start:end]
     
-    # Crop image
-    cropped_img = fisheye_img[start:end, start:end]
+    # Save cropped fisheye image
+    cv2.imwrite(output_img_path, fisheye_cropped)
     
-    # Adjust bounding boxes
-    new_bboxes = []
-    for cls_id, x_c_norm, y_c_norm, w_norm, h_norm in bboxes:
-        # Convert normalized to pixel (S×S)
-        x_c = x_c_norm * S
-        y_c = y_c_norm * S
-        w = w_norm * S
-        h = h_norm * S
-        
-        # Adjust coordinates due to crop
-        x_c_new = x_c - start
-        y_c_new = y_c - start
-        
-        # Calculate the boundary points
-        x_min_new = max(0, x_c_new - w/2)
-        x_max_new = min(new_size, x_c_new + w/2)
-        y_min_new = max(0, y_c_new - h/2)
-        y_max_new = min(new_size, y_c_new + h/2)
-        
-        w_new = x_max_new - x_min_new
-        h_new = y_max_new - y_min_new
-        
-        if w_new > 0 and h_new > 0:
-            x_c_new = (x_min_new + x_max_new) / 2
-            y_c_new = (y_min_new + y_max_new) / 2
-            
-            # Convert to normalized so với kích thước mới
-            x_c_norm_new = x_c_new / new_size
-            y_c_norm_new = y_c_new / new_size
-            w_norm_new = w_new / new_size
-            h_norm_new = h_new / new_size
-            
-            new_bboxes.append((cls_id, x_c_norm_new, y_c_norm_new, w_norm_new, h_norm_new))
-    
-    return cropped_img, new_bboxes
-
-def process_folder(
-    img_folder, 
-    label_folder, 
-    output_img_folder, 
-    output_label_folder,
-    crop_ratio=0.827
-):
-    # Create output directory if it doesn't exist
-    os.makedirs(output_img_folder, exist_ok=True)
-    os.makedirs(output_label_folder, exist_ok=True)
-    
-    print(f"Processing images from {img_folder}")
-    print(f"Using labels from {label_folder}")
-    print(f"Output images will be saved to {output_img_folder}")
-    print(f"Output labels will be saved to {output_label_folder}")
-    print(f"Using crop ratio: {crop_ratio}")
-    
-    # Get list of images in the directory
-    img_extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp']
-    img_paths = []
-    for ext in img_extensions:
-        img_paths.extend(glob.glob(os.path.join(img_folder, ext)))
-    
-    total = len(img_paths)
-    processed = 0
-    errors = []
-    
-    print(f"Starting to process {total} images...")
-    
-    # Use tqdm for progress bar
-    for img_path in tqdm.tqdm(img_paths, desc="Processing fisheye images"):
+    # Transform annotations
+    transformed_annotations = []
+    for ann in annotations:
         try:
-            # Build label path corresponding
-            base_name = os.path.splitext(os.path.basename(img_path))[0]
-            txt_path = os.path.join(label_folder, base_name + ".txt")
+            # Convert bbox to fisheye
+            fisheye_bbox, _ = convert_bbox_to_fisheye(ann['bbox'], w_orig, h_orig, k)
             
-            # Read image
-            img_orig = cv2.imread(img_path)
-            if img_orig is None:
-                errors.append(f"Failed to read image: {img_path}")
-                continue
-                
-            # Process fisheye
-            img_square, f_fisheye, bboxes_fisheye = convert_yolo_bbox_to_fisheye(txt_path, img_orig)
-            fisheye_img = create_fisheye_image(img_square, f_fisheye)
+            # Adjust for cropping
+            cropped_bbox = crop_and_adjust_bbox(fisheye_bbox, S, crop_ratio)
             
-            # Crop and adjust bbox
-            fisheye_cropped, bboxes_cropped = crop_and_adjust_bboxes(
-                fisheye_img, bboxes_fisheye, crop_ratio
-            )
-            
-            # Save image
-            output_img_path = os.path.join(output_img_folder, base_name + ".jpg")
-            cv2.imwrite(output_img_path, fisheye_cropped)
-            
-            # Save label
-            output_txt_path = os.path.join(output_label_folder, base_name + ".txt")
-            with open(output_txt_path, 'w') as f:
-                for bbox in bboxes_cropped:
-                    cls_id, xcn, ycn, wn, hn = bbox
-                    f.write(f"{cls_id} {xcn:.6f} {ycn:.6f} {wn:.6f} {hn:.6f}\n")
-            
-            processed += 1
+            if cropped_bbox is not None:
+                new_ann = ann.copy()
+                new_ann['bbox'] = cropped_bbox
+                new_ann['area'] = cropped_bbox[2] * cropped_bbox[3]
+                transformed_annotations.append(new_ann)
                 
         except Exception as e:
-                errors.append(f"Error processing {img_path}: {str(e)}")
+            print(f"Error transforming annotation: {e}")
+            continue
     
-    # Report result
-    print("\nProcessing complete!")
-    print(f"Successfully processed: {processed}/{total} images")
+    # Create new image info
+    new_image_info = {
+        'id': None,  # Will be set by caller
+        'file_name': os.path.basename(output_img_path),
+        'width': new_size,
+        'height': new_size
+    }
     
-    if errors:
-        print("\nErrors encountered:")
-        with open(os.path.join(output_dir, "errors.log"), "w") as error_file:
-            for error in errors:
-                print(f" - {error}")
-                error_file.write(f"{error}\n")
-        print(f"Error details saved to {os.path.join(output_dir, 'errors.log')}")
-    else:
-        print("No errors occurred")
+    return new_image_info, transformed_annotations
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='Create fisheye augmented images from VisDrone dataset')
-    parser.add_argument('--input-dir', type=str, default='dataset/processed_visdrone',
-                        help='Path to the processed VisDrone dataset directory')
-    parser.add_argument('--output-dir', type=str, default='dataset/aug_visdrone',
-                        help='Path to save the output augmented images and labels')
-    parser.add_argument('--crop-ratio', type=float, default=0.827,
-                        help='Crop ratio for fisheye images')
-    return parser.parse_args()
+def process_coco_json(input_json, input_img_dir, output_json, output_img_dir, k=1.0, crop_ratio=0.827):
+    """
+    Process COCO JSON with fisheye augmentation
+    """
+    print(f"Loading COCO JSON: {input_json}")
+    with open(input_json, 'r') as f:
+        data = json.load(f)
+    
+    images = data['images']
+    annotations = data['annotations']
+    categories = data['categories']
+    
+    print(f"Found {len(images)} images and {len(annotations)} annotations")
+    
+    # Create output directory
+    os.makedirs(output_img_dir, exist_ok=True)
+    
+    # Group annotations by image_id
+    img_id_to_anns = {}
+    for ann in annotations:
+        img_id = ann['image_id']
+        if img_id not in img_id_to_anns:
+            img_id_to_anns[img_id] = []
+        img_id_to_anns[img_id].append(ann)
+    
+    new_images = []
+    new_annotations = []
+    new_ann_id = 1
+    
+    print("Processing images with fisheye augmentation...")
+    for img_info in tqdm(images):
+        img_id = img_info['id']
+        file_name = img_info['file_name']
+        
+        # Input and output paths
+        input_img_path = os.path.join(input_img_dir, file_name)
+        output_img_path = os.path.join(output_img_dir, file_name)
+        
+        if not os.path.exists(input_img_path):
+            print(f"Warning: Image not found: {input_img_path}")
+            continue
+        
+        # Get annotations for this image
+        img_annotations = img_id_to_anns.get(img_id, [])
+        
+        try:
+            # Process image with fisheye and adjust annotations
+            new_img_info, adj_annotations = process_image_and_annotations(
+                input_img_path, img_annotations, output_img_path, k, crop_ratio
+            )
+            
+            # Set image id
+            new_img_info['id'] = img_id
+            new_images.append(new_img_info)
+            
+            # Add adjusted annotations
+            for ann in adj_annotations:
+                ann['id'] = new_ann_id
+                new_annotations.append(ann)
+                new_ann_id += 1
+                
+        except Exception as e:
+            print(f"Error processing {file_name}: {e}")
+            continue
+    
+    # Create output data
+    output_data = {
+        'images': new_images,
+        'annotations': new_annotations,
+        'categories': categories
+    }
+    
+    print(f"Saving fisheye augmented COCO JSON: {output_json}")
+    with open(output_json, 'w') as f:
+        json.dump(output_data, f)
+    
+    print(f"Processed {len(new_images)} images with {len(new_annotations)} annotations")
+    
+    return output_data
+
+def main():
+    parser = argparse.ArgumentParser(description='Apply fisheye augmentation to COCO dataset')
+    parser.add_argument('--input-json', required=True, help='Input COCO JSON file')
+    parser.add_argument('--input-img-dir', required=True, help='Input image directory')
+    parser.add_argument('--output-json', required=True, help='Output COCO JSON file')
+    parser.add_argument('--output-img-dir', required=True, help='Output image directory')
+    parser.add_argument('--k', type=float, default=1.0, help='Fisheye scale factor')
+    parser.add_argument('--crop-ratio', type=float, default=0.827, help='Crop ratio for fisheye images')
+    
+    args = parser.parse_args()
+    
+    process_coco_json(
+        args.input_json,
+        args.input_img_dir,
+        args.output_json,
+        args.output_img_dir,
+        args.k,
+        args.crop_ratio
+    )
 
 if __name__ == "__main__":
-    args = parse_args()
-    
-    # Set up paths
-    input_dir = Path(args.input_dir)
-    output_dir = Path(args.output_dir)
-    
-    img_folder = input_dir / 'images'
-    label_folder = input_dir / 'merged_labels'
-    output_img_folder = output_dir / 'images'
-    output_label_folder = output_dir / 'labels'
-    
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Process all images
-    process_folder(
-        img_folder=img_folder,
-        label_folder=label_folder,
-        output_img_folder=output_img_folder,
-        output_label_folder=output_label_folder,
-        crop_ratio=args.crop_ratio
-    )
-    
+    main()
