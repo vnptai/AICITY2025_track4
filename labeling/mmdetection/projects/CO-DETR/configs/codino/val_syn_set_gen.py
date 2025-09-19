@@ -35,7 +35,7 @@ model = dict(
         transformer=dict(encoder=dict(with_cp=6))))
 
 
-data_root = '../../data/train/'
+data_root = '../../data/val_syn/'
 metainfo = {
     'classes': ('Bus', 'Bike', 'Car', 'Pedestrian', 'Truck'),
 }
@@ -57,17 +57,17 @@ val_dataloader = dict(
         pipeline=test_pipeline,
         data_root=data_root,
         metainfo=metainfo,
-        ann_file=data_root + 'train.json',
+        ann_file=data_root + 'val_syn.json',
         data_prefix=dict(img=data_root + 'images/')
         ))
 test_dataloader = val_dataloader
 
 val_evaluator = dict(  # Validation evaluator config
     type='CocoMetric',  # The coco metric used to evaluate AR, AP, and mAP for detection and instance segmentation
-    ann_file=data_root + 'train.json',  # Annotation file path
+    ann_file=data_root + 'val_syn.json',  # Annotation file path
     metric=['bbox'],  # Metrics to be evaluated, `bbox` for detection and `segm` for instance segmentation
     format_only=True,  # Whether to only evaluate the results without inference
-    outfile_prefix=data_root + 'train_gen')  # 要保存的 JSON 文件的前缀
+    outfile_prefix=data_root + 'val_syn_gen')  # 要保存的 JSON 文件的前缀
 test_evaluator = val_evaluator  # Testing evaluator config
 
 optim_wrapper = dict(optimizer=dict(lr=1e-4))

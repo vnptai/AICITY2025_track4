@@ -3,7 +3,7 @@ from ultralytics import YOLO
 model = YOLO("../weights/yolo11m-obj365.pt")
 
 train_results = model.train(
-    data="../data/final.yaml",  # Path to dataset configuration file
+    data="../data/full-pipeline.yaml",  # Path to dataset configuration file
     epochs=100,  # Number of` training epochs
     imgsz=960,  # Image size for training
     device=[0,1],  # Device to run on (e.g., 'cpu', 0, [0,1,2,3])

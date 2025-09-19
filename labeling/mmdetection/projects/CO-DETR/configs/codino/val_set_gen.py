@@ -35,8 +35,8 @@ model = dict(
         transformer=dict(encoder=dict(with_cp=6))))
 
 
-data_root = '/media/hungdv/Source/Data/AICity2025/track4_final/val/'
-# data_root = '../../data/val/'
+# data_root = '/media/hungdv/Source/Data/AICity2025/track4_final/val/'
+data_root = '../../data/val/'
 metainfo = {
     'classes': ('Bus', 'Bike', 'Car', 'Pedestrian', 'Truck'),
 }

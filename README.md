@@ -2,17 +2,6 @@
 
 End-to-end pipeline for training and converting the model used in AICITY2025 Track 4.
 
-
-## Installation
-```
-git clone <this_repo_url>
-cd AICITY2025_track4
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt  # If provided
-```
-(If `requirements.txt` not yet created, install deps referenced inside training scripts.)
-
 ## 1. Download Data
 Download the dataset archive(s) from:
 <DATA_DOWNLOAD_LINK>
@@ -61,8 +50,9 @@ AICITY2025_track4/weights/
 Example:
 ```
 weights/
-  backbone.pth
-  object365_pretrained.pth   # (will be produced later if you pretrain)
+  CO_DETR.pth
+  yolo11m-obj365.pt   # (object365 pretrained weights)
+  yolo11m.engine
 ```
 
 ## 3. (Optional) Regenerate Labels 
@@ -86,21 +76,12 @@ cd training
 python train.py
 ```
 
-## 6. Convert / Export Model
+## 6. Convert and Inference on Jetson
 After training:
 ```
 cd scripts
 bash convert_model.sh
 ```
-Outputs might include ONNX / TorchScript versions (depends on script implementation).
 
-## 7. Inference (Example)
-(Adjust once an inference script exists.)
-```
-python inference.py \
-  --weights model/final_model.pth \
-  --source data/images/sample.jpg \
-  --out outputs/
-```
 
 
