@@ -4,7 +4,7 @@ End-to-end pipeline for training and converting the model used in AICITY2025 Tra
 
 ## 1. Download Data
 Download the dataset archive(s) from:
-[data link] (https://1drv.ms/u/c/3f64f78089759ca1/EUQph3AKj5ZDr-r2AFxTpO0BEqsDVCDDoIYNnY3Ynn-EiA?e=InRCUr)
+[data link](https://1drv.ms/u/c/3f64f78089759ca1/EUQph3AKj5ZDr-r2AFxTpO0BEqsDVCDDoIYNnY3Ynn-EiA?e=InRCUr)
 
 Extract them into:
 ```
